@@ -1,0 +1,190 @@
+
+### key trend in median wealth over the last 30 years by race
+library(dplyr)
+library(tidyr)
+
+
+wealth.data = as.data.frame(read.csv("C:/Users/Admin/Downloads/RA_21_22.csv", header= TRUE))
+wealth = wealth.data %>% mutate(Asset_total_in_million =round(0.000001*asset_total,5), Asset_housing_in_million= round(0.000001*asset_housing,5), 
+                                Non_Housing_Wealth_in_million = round(Asset_total_in_million-Asset_housing_in_million,5))
+trend_race_wealth= as.data.frame(tapply(wealth$Asset_total_in_million, list(wealth$year,wealth$race), median))
+trend_race_wealth
+plot(trend_race_wealth$white, type= "o",xaxt= "n" ,main ="Trend in Median Wealth by Race", ylab="Total_Asset (in million)", xlab="Year",col= "Black",ylim= c(0,1))
+x_labels <- seq(1989, 2016, by = 3)
+axis(1, at = 1:10, labels=x_labels)
+lines(trend_race_wealth$other, type="o", col= "Blue")
+lines(trend_race_wealth$Hispanic, type = "o", col="Red")
+lines(trend_race_wealth$black, type="o", col= "Purple")
+legend("topright", legend = c("White", "Other", "Hispanic", "Black"), col = c("black", "blue", "red", "purple"), lty = 1)
+
+# key trend in median wealth over the last 30 years by education
+trend_edu_wealth= as.data.frame(tapply(wealth$Asset_total_in_million, list(wealth$year,wealth$education), median))
+trend_edu_wealth
+plot(trend_edu_wealth$`college degree`, type= "o",xaxt= "n" ,main ="Trend in Median Wealth by Education", ylab="Total_Asset (in million)",xlab="Year", col= "Black",ylim= c(0,3) )
+x_labels <- seq(1989, 2016, by = 3)
+axis(1, at = 1:10, labels=x_labels)
+lines(trend_edu_wealth$`no college`, type="o", col= "Blue")
+lines(trend_edu_wealth$`some college`, type = "o", col="Red")
+legend("topright", legend = c("College Degree", "No College", "Some College"), col = c("black", "blue", "red"), lty = 1)
+
+# key trend in median wealth over the last 30 years by Race & education
+trend_race_edu= as.data.frame(tapply(wealth$Asset_total_in_million, list(wealth$year,wealth$race, wealth$education), median))
+trend_race_edu
+
+#Trend in wealth with college Degree by Race
+par(mfrow=(c(2,2)))
+plot(trend_race_edu$`white.college degree`, type= "o",xaxt= "n" ,main ="Trend in Median Wealth with College Degree by Race", ylab="Total_Asset (in million)", xlab="Year",col= "Black",ylim= c(0,3.5))
+x_labels <- seq(1989, 2016, by = 3)
+axis(1, at = 1:10, labels=x_labels)
+lines(trend_race_edu$`other.college degree`, type="o", col= "Blue")
+lines(trend_race_edu$`Hispanic.college degree`, type = "o", col="Red")
+lines(trend_race_edu$`black.college degree`, type="o", col= "Purple")
+legend("topright", legend = c("White", "Other", "Hispanic", "Black"), col = c("black", "blue", "red", "purple"), lty = 1)
+
+#Trend in wealth with No College Degree by Race
+plot(trend_race_edu$`white.no college`, type= "o",xaxt= "n" ,main ="Trend in  Median Wealth with No College Degree by Race", ylab="Total_Asset (in million)", xlab="Year", col= "Black",ylim= c(0,1))
+x_labels <- seq(1989, 2016, by = 3)
+axis(1, at = 1:10, labels=x_labels)
+lines(trend_race_edu$`other.no college`, type="o", col= "Blue")
+lines(trend_race_edu$`Hispanic.no college `, type = "o", col="Red")
+lines(trend_race_edu$`black.no college`, type="o", col= "Purple")
+legend("topright", legend = c("White", "Other", "Hispanic", "Black"), col = c("black", "blue", "red", "purple"), lty = 1)
+
+#Trend in wealth with Some College Degree by Race
+plot(trend_race_edu$`white.some college`, type= "o",xaxt= "n" ,main ="Trend in Median Wealth with Some College Degree by Race", ylab="Total_Asset (in million)", xlab="Year", col= "Black",ylim= c(0,1))
+x_labels <- seq(1989, 2016, by = 3)
+axis(1, at = 1:10, labels=x_labels)
+lines(trend_race_edu$`other.some college`, type="o", col= "Blue")
+lines(trend_race_edu$`Hispanic.some college`, type = "o", col="Red")
+lines(trend_race_edu$`black.some college`, type="o", col= "Purple")
+legend("topright", legend = c("White", "Other", "Hispanic", "Black"), col = c("black", "blue", "red", "purple"), lty = 1)
+#TOtal_asset by education
+plot(trend_edu_wealth$`college degree`, type= "o",xaxt= "n" ,main ="Trend in Median Wealth by Education", ylab="Total_Asset (in million)",xlab="Year", col= "Black",ylim= c(0,3) )
+x_labels <- seq(1989, 2016, by = 3)
+axis(1, at = 1:10, labels=x_labels)
+lines(trend_edu_wealth$`no college`, type="o", col= "Blue")
+lines(trend_edu_wealth$`some college`, type = "o", col="Red")
+legend("topright", legend = c("College Degree", "No College", "Some College"), col = c("black", "blue", "red"), lty = 1)
+#Housing Wealth
+td_race.hou.w= as.data.frame(tapply(wealth$Asset_housing_in_million, list(wealth$year,wealth$race), median))
+td_race.hou.w
+plot(td_race.hou.w$white, type= "o",xaxt= "n" ,main ="Trend in Median Housing-Wealth by Race", ylab="Housing_Asset (in million)", xlab="Year", col= "Black",ylim= c(0,0.5))
+axis(1, at = 1:10, labels=x_labels)
+lines(td_race.hou.w$black, type="o", col= "Purple")
+legend("topright", legend = c("White", "Black"), col = c("black", "purple"), lty = 1)
+
+#Housing Wealth above 25 years by Race
+filtered_data <- subset(wealth, age > 25)
+td_race_age.hou.w= as.data.frame(tapply(filtered_data$Asset_housing_in_million, list(filtered_data$year,filtered_data$race), median))
+td_race_age.hou.w
+plot(td_race_age.hou.w$white,type= "o",xaxt= "n" ,main ="Trend in Median Housing-Wealth above 25+ age", ylab="Housing Asset (in million)", col= "Black",ylim= c(0,0.5))
+axis(1, at = 1:10, labels=x_labels)
+lines(td_race_age.hou.w$black, type="o", col= "Purple")
+
+legend("topright", legend = c("White", "Black"), col = c("black", "purple"), lty = 1)
+
+#Non_housing Wealth above 25 years by Race
+td_race_age.non_hou.w= as.data.frame(tapply(filtered_data$Non_Housing_Wealth_in_million, list(filtered_data$year,filtered_data$race), median))
+td_race_age.non_hou.w
+plot(td_race_age.non_hou.w$black,type= "o",xaxt= "n" ,main ="Trend in Median Non-Housing Wealth above 25+ age", ylab="Housing Asset (in million)", col= "purple",ylim= c(0,0.5))
+axis(1, at = 1:10, labels=x_labels)
+lines(td_race_age.non_hou.w$white, type="o", col= "black")
+legend("topright", legend = c("White", "Black"), col = c("black", "purple"), lty = 1)
+
+#Combined Non-Housing & Housing Wealth above 25+ years
+plot(td_race_age.non_hou.w$black,type= "o",xaxt= "n" ,main ="Trend in Median Housing, Non-Housing Wealth above 25+ age by Race", ylab="Housing Asset (in million)", xlab="Year",col= "purple",ylim= c(0,0.5))
+axis(1, at = 1:10, labels=x_labels)
+lines(td_race_age.non_hou.w$white, type="o", col= "black")
+lines(td_race_age.hou.w$black, type="o", col= "red") #hosuing black
+lines(td_race_age.hou.w$white, type="o", col= "green") #housing white
+legend("topright", legend = c("White_non_hou", "Black_non_hou", "Black_hou", "White_hou"), col = c("black", "purple","red", "green"), lty = 1)
+
+#2007 Base period Housing Wealth
+base_year = 2007
+trend
+trend= as.data.frame(tapply(filtered_data$Asset_housing_in_million, list(filtered_data$year,filtered_data$race), median))
+row_base = trend[7,]
+results <- data.frame()
+row_1989 <- trend[1,]
+row_1992 <- trend[2, ]
+row_1995 <- trend[3, ]
+row_1998 <- trend[4, ]
+row_2001 <- trend[5, ]
+row_2004 <- trend[6, ]
+row_base <- trend[7, ]
+row_2010 <- trend[8, ]
+row_2013 <- trend[9, ]
+row_2016 <- trend[10,]
+diff_89= row_1989 - row_base
+diff_92 = row_1992  -row_base
+diff_95 = row_1995 -row_base
+diff_98 = row_1998 -row_base
+diff_01 = row_2001 -row_base
+diff_04 = row_2004 -row_base
+diff_07 = row_base -row_base
+diff_10 = row_2010 -row_base
+diff_13 = row_2013 -row_base
+diff_16 = row_2016 -row_base
+# difference in wealth box plot
+Change_in_median_total_asset <- rbind(results, diff_89,diff_92, diff_95,diff_98, diff_01, diff_04, diff_07,diff_10, diff_13, diff_16)
+Change_in_median_total_asset 
+par(mfrow=c(2,2) )
+
+barplot(Change_in_median_total_asset$white,xaxt= "n" ,main ="White ", ylab="Total Assest(in million)", col= "Black",ylim= c(-0.35,0.35))
+abline(h = 0, col = "red", lty = 2)
+axis(1, at = 1:10, labels=x_labels)
+mtext("Difference in Median housing Wealth from Base Year (2007)", side = 3, line = 0, cex = 0.8, col = "black")
+barplot(Change_in_median_total_asset$black,xaxt= "n" ,main ="Black", ylab="Total Assest(in million)", col= "purple",ylim= c(-0.35,0.35))
+abline(h = 0, col = "red", lty = 2)
+axis(1, at = 1:10, labels=x_labels)
+mtext("Difference in  Median Housing_Wealth from Base Year (2007)", side = 3, line = 0, cex = 0.8, col = "black")
+barplot(Change_in_median_total_asset$Hispanic,xaxt= "n" ,main ="Hispanic", ylab="Total Assest(in million)", col= "red",ylim= c(-0.35,0.35))
+abline(h = 0, col = "red", lty = 2)
+axis(1, at = 1:10, labels=x_labels)
+mtext("Difference in  Median Housing_Wealth from Base Year (2007)", side = 3, line = 0, cex = 0.8, col = "black")
+barplot(Change_in_median_total_asset$other,xaxt= "n" ,main ="Others", ylab="Total Assest(in million)", col= "Blue",ylim= c(-0.35,0.35))
+axis(1, at = 1:10, labels=x_labels)
+mtext("Difference in  Median Housing_Wealth from Base Year (2007)", side = 3, line = 0, cex = 0.8, col = "black")
+
+
+# Difference in the total asset line chart
+plot(Change_in_median_total_asset$white,xaxt= "n" ,main ="White ", ylab="Total Assest(in million)", col= "Black",ylim= c(-0.35,0.35))
+x_labels <- seq(1989, 2016, by = 3)
+abline(h = 0, col = "red", lty = 2)
+axis(1, at = 1:10, labels=x_labels)
+lines(Change_in_median_total_asset$other, type="o", col= "Blue")
+lines(Change_in_median_total_asset$Hispanic, type = "o", col="Red")
+lines(Change_in_median_total_asset$black, type="o", col= "Purple")
+legend("topright", legend = c("White", "Other", "Hispanic", "Black"), col = c("black", "blue", "red", "purple"), lty = 1)
+
+#Proportional change in Median Asset Total by Race
+pro_89= (row_1989 -row_base)/row_base
+pro_92 = ((row_1992  -row_base )/row_base)*100
+pro_95 = ((row_1995 -row_base)/row_base)*100
+pro_98 = ((row_1998 -row_base)/row_base)*100
+pro_01 = ((row_2001 -row_base)/row_base)*100
+pro_04 = ((row_2004 -row_base)/row_base)*100
+pro_07 = ((row_base -row_base)/row_base)*100
+pro_10 = ((row_2010 -row_base)/row_base)*100
+pro_13 = ((row_2013 -row_base)/row_base)*100
+pro_16 = ((row_2016 -row_base)/row_base)*100
+
+Prop_Change_in_median_total_asset <- rbind(results, pro_89,diff_92, pro_95,diff_98, pro_01, pro_04, pro_07,pro_10, pro_13, pro_16)
+Prop_Change_in_median_total_asset
+par(mfrow=c(2,2) )
+barplot(Prop_Change_in_median_total_asset$white, type= "o",xaxt= "n" ,main ="White", ylab="Change in Asset(in%)", col= "Black",ylim= c(-60,70))
+x_labels <- seq(1989, 2016, by = 3)
+abline(h = 0, col = "red", lty = 2)
+axis(1, at = 1:10, labels=x_labels)
+mtext("proportion change in  Median Housing_Wealth from Base Year (2007)", side = 3, line = 0, cex = 0.8, col = "black")
+barplot(Prop_Change_in_median_total_asset$black,xaxt= "n" ,main ="Black", ylab="Change in Asset(in%)", col= "purple",ylim= c(-60,70))
+abline(h = 0, col = "red", lty = 2)
+axis(1, at = 1:10, labels=x_labels)
+mtext("proportion change in Median Housing_Wealthfrom Base Year (2007)", side = 3, line = 0, cex = 0.8, col = "black")
+barplot(Prop_Change_in_median_total_asset$Hispanic,xaxt= "n" ,main ="Hispanic", ylab="Change in Asset(in%)", col= "red",ylim= c(-100,70))
+abline(h = 0, col = "red", lty = 2)
+axis(1, at = 1:10, labels=x_labels)
+mtext("proportion change in  Median Housing_Wealth from Base Year (2007)", side = 3, line = 0, cex = 0.8, col = "black")
+barplot(Prop_Change_in_median_total_asset$other,xaxt= "n" ,main ="Others", ylab="Change in Asset(in%)", col= "Blue",ylim= c(-60,70))
+axis(1, at = 1:10, labels=x_labels)
+mtext("proportion change in  Median Housing_Wealth from Base Year (2007)", side = 3, line = 0, cex = 0.8, col = "black")
