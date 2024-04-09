@@ -1,0 +1,326 @@
+#install.packages("arrow")
+#install.packages("data.table")                                    
+                                        #install.packages("dplyr")
+                                        #install.packages("ggplot2")
+#install.packages("stringr")
+library(arrow)
+library(data.table)
+library(dplyr)
+library(reshape2)
+library(ggplot2)
+library(stringr)
+#################################################################################
+
+rds_files <- c("/home/kirti/plfs/perfv201718.rds", 
+               "/home/kirti/plfs/perfv201819.rds", 
+               "/home/kirti/plfs/perfv201920.rds",
+               "/home/kirti/plfs/perfv202021.rds",
+               "/home/kirti/plfs/perfv202122.rds",
+               "/home/kirti/plfs/perfv202223.rds")
+
+# Read RDS files into a list of data frames
+data_list <- lapply(rds_files, readRDS)
+
+# Determine common columns
+common_columns <- Reduce(intersect, lapply(data_list, names))
+
+# Filter and align data frames to include only common columns
+aligned_data_list <- lapply(data_list, function(df) df[, .SD, .SDcols = common_columns])
+
+# Merge data frames into a single data frame
+merged_df <- do.call(rbind, aligned_data_list)
+
+# Write merged data frame to a Parquet file
+write_parquet(arrow::as_arrow_table(merged_df), "output.parquet")
+
+###################################################################################
+
+read_parquet("/home/kirti/plfs/output.parquet")->plfs_data
+#partioned the data
+write_dataset(plfs_data, "plfs_data_partitioned", partitioning =c("year"))
+
+                                        #read partitioned data
+open_dataset("plfs_data_partitioned")-> plfsall
+copy(plfsall)-> status
+
+####################################################################################
+
+status <- status %>% mutate(sex=as.numeric(sex))%>%
+    mutate(sex = if_else(sex == 1, "Male",if_else(sex == 2, "Female","Transgender")))%>%
+    mutate(work_act = if_else(status_code <= 72 , "working" ,if_else(status_code == 91 , "student" , "others")))%>%
+    mutate(age = as.numeric(age))%>%
+    mutate(age_cat = if_else(age >= 0 & age<= 5, "0-05",if_else(age >= 6 & age<=10 , "06-10",if_else(age >= 11 & age<=15, "11-15",if_else(age >= 16 & age<= 20 ,"16-20",if_else(age >= 21 & age<= 25 , "21-25",if_else(age >= 26  & age<= 30 , "26-30",if_else(age >=31  & age<=35 ,"31-35",if_else(age >=36  & age<= 40,"36-40",if_else(age >= 41  & age<= 45, "41-24",if_else(age >=46  & age<=50, "46-50",if_else(age >=51  & age<=55, "51-55",if_else(age >= 56  & age<=60, "56-60",if_else(age >=61  & age<=65, "61-65",if_else(age >=66  & age<=70, "66-70" ,"70+")))))))))))))))%>%
+    mutate(attendance=as.numeric(attendance))%>%
+    mutate(degree = if_else(attendance == 23, "pre-primary",
+                            if_else(attendance == 24, "primary",
+                                    if_else(attendance == 25, "secondary",
+                                            if_else(attendance == 26, "higher_secondary" ,
+                                                    if_else(attendance == 28|attendance == 29| attendance == 30 | attendance == 31,"graduate" ,
+                                                            if_else(attendance == 32,"post graduate & above",
+                                                                    if_else(attendance >= 33, "diploma","others"))))))))
+
+
+#NCO code 2015
+status <- status %>%
+  mutate(nco_code = as.character(nco_code)) %>%
+  mutate(occupation = case_when(
+    as.numeric(nco_code) <= 143 ~ "legistors, senior off & managers",
+    as.numeric(nco_code) >= 211 & as.numeric(nco_code) <= 265 ~ "professionals",
+    as.numeric(nco_code) >= 311 & as.numeric(nco_code) <= 352 ~ "technicians & associate prof",
+    as.numeric(nco_code) >= 411 & as.numeric(nco_code) <= 432 ~ "clerks",
+    as.numeric(nco_code) >= 511 & as.numeric(nco_code) <= 541 ~ "service workers & shop",
+    as.numeric(nco_code) >= 611 & as.numeric(nco_code) <= 634 ~ "skilled agri & fishery",
+    as.numeric(nco_code) >= 711 & as.numeric(nco_code) <= 754 ~ "craft workers",
+    as.numeric(nco_code) >= 811 & as.numeric(nco_code) <= 835 ~ "plant & machine operators",
+    as.numeric(nco_code) >= 911 & as.numeric(nco_code) <= 962 ~ "elementary occupation",
+    nco_code %in% c("X00", "X10", "X99") ~ "others",
+    TRUE ~ "others")) # default case
+
+
+status <- status %>%
+  mutate(status_code =as.numeric(status_code),
+         work = if_else(status_code <= 72,"Working","Not Working"))
+
+status <- status %>% mutate(sector= if_else(sector == 1 ,"Rural","Urban"))
+
+                                                                                                                    
+######################################################
+##Work Participation Rate, 15-59 years
+
+w1<- status |> filter(age >=15 , age<=59, sex != "Transgender", !is.na(work)) |> select(year,sex,sector,work,weight) |> collect()
+
+# out of total rural female how many are working or not working
+w1[,.(total=sum(weight)),.(year,sex,sector,work)][,.(per=round(total*100/sum(total),2),work),.(year,sex,sector)] ->dw1
+dw1
+dcast(dw1, year+work ~ sex+sector , value.var="per")
+ggplot(dw1, aes(x = factor(year), y = per, fill = factor(work)))+ geom_col(position="dodge")+labs(x = "age", y = "% ", title = "Work force participation") +theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + facet_wrap(~sex+sector,nrow=2)
+
+##############################
+                                        #Working. Out of labour force, student *sex
+a1 <- status |> filter(age >=15 & age <=59) |> group_by(year, work_act,sex)|> summarize (pop = sum(weight)) |> arrange(year)|> collect()
+
+data.table(a1) ->a1
+
+a1[ sex != "Transgender",.(per=round(pop*100/sum(pop),2),work_act),.(year,sex)] ->b1
+
+ggplot(b1, aes(x = factor(year), y = per, fill = work_act)) +geom_col(position="dodge")+scale_y_continuous(breaks = seq(0, 100, by = 5), labels = seq(0, 100, by = 5))+labs(x = "Year", y = "% ", title = "Gender distribution from 2017-2022") +facet_grid(. ~ sex)
+
+##Working. Out of labour force, student *age_category
+
+a2 <- status |> group_by(year, work_act,age_cat)|> summarize (pop = sum(weight)) |> arrange(year,age_cat)|> collect()
+data.table(a2) ->a2
+
+a2[,.(per=round(pop*100/sum(pop),2),work_act),.(year,age_cat)] ->b2
+
+#Age*years
+ggplot(b2, aes(x = factor(year), y = per, fill = work_act)) +geom_col()+labs(x = "years", y = "% ", title = "Age Category from 2017-2022") +theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +facet_wrap(~age_cat,nrow=3)
+
+#age_distribution
+ggplot(b2, aes(x = factor(age_cat), y = per, fill = work_act)) +geom_col()+labs(x = "years", y = "% ", title = "Age distribution from 2017-2022") +theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +facet_wrap(~year,nrow=2)
+
+############################################
+
+#Student in age #percentage change
+a3 <- status |> filter(status_code ==91, age <= 20 ) |> group_by(year,age)|> summarize (pop = sum(weight)) |> arrange(year,age)|> collect()
+
+data.table(a3) ->a3
+
+a4<-a3 |> group_by(age) |> mutate(per_change = lag(pop, 1)) |>  mutate(per_change_pct = (pop - per_change) / per_change * 100,.after = c(per_change))|> filter( year != 2017)
+
+
+dcast(a4, age~ year , value.var ="pop") ->b4
+
+
+ggplot(a4, aes(x = factor(year), y = per_change_pct)) +geom_col(position= "dodge")+labs(x = "age", y = "% ", title = "Age distribution from 2017-2022") + facet_wrap(~age,nrow=2)
+
+##change in age # 5 year kid turns 6 in 2018 to 10 year in 2022./ whats the net change in each year
+a31 <- status |> group_by(year,age)|> mutate(year=as.numeric(year)) |> summarize (pop = sum(weight)) |> arrange(year,age)|> collect()
+a31
+dcast(a31, age~year,value.var=c("pop"))->d31
+data.table(d31) ->d31
+d31
+d31$l18<-lead(d31$"2018")
+d31$l19<-lead(lead(d31$"2019"))
+d31$l20<-lead(lead(lead(d31$"2020")))
+d31$l21<-lead(lead(lead(lead(d31$"2021"))))
+d31$l22<-lead(lead(lead(lead(lead(d31$"2022")))))
+d31$p18 <- round((d31$"l18"-d31$"2017")*100/d31$"2017",2)
+d31$p19 <- round((d31$"l19"-d31$"l18")*100/d31$"l18",2)
+d31$p20 <- round((d31$"l20"-d31$"l19")*100/d31$"l19",2)
+d31$p21 <- round((d31$"l20"-d31$"l21")*100/d31$"l20",2)
+d31$p22 <- round((d31$"l21"-d31$"l22")*100/d31$"l21",2)
+na.omit(d31)->d31
+d32 <- d31 |> select(age,p18,p19,p20,p21,p22)
+melt(d32,id.vars=c("age"), variable.name ="year") ->m1
+
+ggplot(m1,aes(x=factor(year),y=value))+geom_col()+
+    facet_wrap(~age,nrow=2, scale ="free")+
+    labs(x="year",y="percent change")+
+    theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+
+   #Percentage change by gender  #student*Sex*age
+s1 <- status |> filter(status_code ==91, age <= 20, sex !="Transgender" ) |> group_by(year,age,sex)|> summarize (pop = sum(weight)) |> arrange(year,age)|> collect()
+
+data.table(s1) ->s1
+
+s2<-s1 |> group_by(age,sex) |> mutate(per_change = lag(pop, 1)) |>  mutate(per_change_pct = (pop - per_change) / per_change * 100,.after = c(per_change)) |> filter(year != 2017)
+
+#graph age wise
+ggplot(s2, aes(x = factor(year), y = per_change_pct, fill=sex)) +geom_col(position= "dodge")+labs(x = "age", y = "% ", title = "Drop outs age*sex") + facet_wrap(~age,nrow=2)
+
+                                        #graph year wise #different axis
+ggplot(s2, aes(x = factor(age), y = per_change_pct, fill=sex)) +geom_col(position= "dodge")+labs(x = "age", y = "% ", title = "Drop outs age*sex") + facet_wrap(~year,scales="free_y",nrow=2)
+
+dcast(s2, age+sex~ year , value.var ="per_change_pct")
+
+                                        #degree age <= 30
+s3 <- status |> filter(status_code ==91, age <= 30, sex !="Transgender", !is.na(degree) ) |> group_by(year,sex,degree)|> summarize (pop = sum(weight)) |> arrange(year)|> collect()
+
+data.table(s3) ->s3
+
+s4<-s3 |> group_by(sex,degree) |> mutate(per_change = lag(pop, 1)) |>  mutate(per_change_pct = (pop - per_change) / per_change * 100,.after = c(per_change)) |> filter(year != 2017)
+
+ggplot(s4, aes(x = factor(year), y = per_change_pct, fill=sex)) +geom_col(position="dodge")+labs(x = "age", y = "% ", title = "Drop outs age*sex") + facet_wrap(~degree,nrow=2,scale="free")
+###############################################
+                                        #Workers' Occupation in million
+
+o1 <- status |> filter(occupation != "others") |> group_by(year,occupation)|> summarize (pop = sum(weight)) |> arrange(year)|> collect() |> mutate( pop = pop/1000000)
+
+ggplot(o1, aes(x = factor(year), y = pop)) +geom_col()+labs(x = "Year", y = "in millions ", title = " 2017-2022")+ facet_wrap ( ~occupation, nrow=3)
+
+#Age by occupation mobility
+
+o2 <- status |> filter(occupation != "others") |> group_by(year,occupation,age_cat)|> summarize (pop = sum(weight)) |> arrange(year, age_cat)|> collect() |> mutate( pop = pop/1000000)
+
+data.table(o2) ->o2
+
+o2[,.(per = round(pop*100/sum(pop),2),occupation),.(year,age_cat)]->o3
+
+ggplot(o3, aes(x = factor(year), y = per, fill = occupation)) +geom_col()+labs(x = "Year", y = "in millions ", title = " 2017-2022") +facet_wrap ( ~age_cat, nrow=3)
+
+
+########################################################
+##CASUAL LABOUR
+
+c1 <- status %>% filter (status_code_activity1_day1 %in% c(41, 42, 51)
+                         | status_code_activity1_day2 %in% c(41, 42, 51)
+                         | status_code_activity1_day3 %in% c(41, 42, 51)
+                         | status_code_activity1_day4 %in% c(41, 42, 51)
+                         | status_code_activity1_day5 %in% c(41, 42, 51)
+                         | status_code_activity1_day6 %in% c(41, 42, 51)
+                         | status_code_activity1_day7 %in% c(41, 42, 51)
+                         | status_code_activity2_day1 %in% c(41, 42, 51)
+                         | status_code_activity2_day2 %in% c(41, 42, 51)
+                         | status_code_activity2_day3 %in% c(41, 42, 51)
+                         | status_code_activity2_day4 %in% c(41, 42, 51)
+                         | status_code_activity2_day5 %in% c(41, 42, 51)
+                         | status_code_activity2_day6 %in% c(41, 42, 51)
+                         |  status_code_activity2_day7 %in% c(41, 42, 51))%>%
+    select(year, sex,sector,weight, matches("_day[1-7]"))%>%
+    select(-matches("total_hours"))%>%
+    select(-matches("hours_additional_work"))%>% collect()
+
+c1 <- c1 |> mutate(hhd_id = paste0("H",row_number()))
+data.table(c1) ->c1
+
+melt(c1, id.vars = c("hhd_id", "year", "sex","sector","weight"), variable.name = "variable", value.name = "value") ->cd
+
+str_sub(cd$variable, end = -16)->cd$code
+str_sub(cd$variable, -1,-1)->cd$day
+str_sub(cd$variable,-6,-6)->cd$activity
+cd[,-6]->melt_d
+
+dcast(melt_d,...~code, value.var ="value")-> cast_dt
+data.table(cast_dt)->cast_dt
+as.numeric(cast_dt$wage) ->cast_dt$wage
+as.numeric(cast_dt$hours) ->cast_dt$hours
+
+
+ifelse(cast_dt$status_code == 41,"casual_public" ,
+ifelse(cast_dt$status_code == 42,"casual_MGNREG",
+ifelse(cast_dt$status_code == 51,"casual_others","others")))->cast_dt$casual
+
+ifelse(cast_dt$nic <= 03 , "agriculture" ,
+ifelse(cast_dt$nic >= 05 & cast_dt$nic <= 09 , "mining",
+ifelse(cast_dt$nic >= 10 & cast_dt$nic <= 33 , "manufacturing",
+ifelse(cast_dt$nic == 35 , "electricity,gas",
+ifelse(cast_dt$nic >= 36 & cast_dt$nic <= 39 , "water supply",
+ifelse(cast_dt$nic >= 41 & cast_dt$nic <=43, "construction",
+ifelse(cast_dt$nic >= 45 & cast_dt$nic <= 96 , "services",
+ifelse(cast_dt$nic >= 97 , "others", "others")))))))) -> cast_dt$industry
+
+#POPULATION SEGREGATION  of CASUAL WORKER
+
+#per of casual workerin different industry
+cast_dt[status_code == 51 |status_code == 41 |status_code == 42,. (pop=sum(weight)),.(year,industry)][,.( per= pop*100/sum(pop),industry),year] -> c2
+
+#out of total casual worker in indusrtry how many are male or female
+cast_dt[(status_code == 51 |status_code == 41 |status_code == 42),!is.na(nic) & sex != "Transgender" ,. (pop=sum(weight)), .(year,industry,sex)][,.( per = pop*100/sum(pop),sex),.(industry,year)] ->ind1
+
+ggplot(ind1, aes(x= factor(year), y= per , fill =sex)) +geom_col() +theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + facet_wrap(~industry,nrow=2)
+
+# out of causal male worker how many in which industry
+cast_dt[ !is.na(nic) & sex != "Transgender" ,. (pop=sum(weight)), .(industry,sex,year)][,.( per_2017 = round(pop*100/sum(pop),2),industry),.(sex,year)] ->ind2
+
+
+ggplot(ind2, aes(x = factor(year), y = per_2017, fill = industry)) +
+    geom_col() +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + 
+  labs(x = "Industry", y = "% of casual worker", title = "Percentage of casual workers") +
+    facet_wrap(~ sex, scale="free")
+
+###WAGES
+
+as.numeric(cast_dt$day)->cast_dt$day
+cast_dt [(status_code == 51 |status_code == 41 |status_code == 42) & sex != "Transgender" ,.(wage = round(sum(wage*weight)/sum(weight),2)),.(year,sex,activity,industry,casual)][order(year)]->cs1
+
+
+#activity+day wages
+ggplot(cs1, aes(x = factor(year), y = wage, fill =activity)) +
+    geom_col(position="dodge") +
+    theme_bw() +facet_wrap(~casual)
+
+                                        # Average wages overall
+cast_dt [(status_code == 51 |status_code == 41 |status_code == 42) & sex != "Transgender" ,.(wage = round(sum(wage*weight)/sum(weight),2)),.(year,sex,industry,casual)][order(year)]->cs2
+
+ggplot(cs2, aes(x = factor(year), y = wage, fill=sex)) +
+    geom_col(position ="dodge") +
+    theme_bw() +facet_grid(.~casual) 
+    
+                                        #Average Wage Rural-urban * male-Female
+cast_dt [(status_code == 51 |status_code == 41 |status_code == 42) & sex != "Transgender" ,.(wage = round(sum(wage*weight)/sum(weight),2)),.(year,sex,sector,casual)][order(year)]->csf1
+
+ggplot(csf1, aes(x = factor(year), y = wage, fill= casual)) +
+    geom_col(position ="dodge") +
+    theme_bw() +facet_wrap(~sector+sex,nrow=2)
+                                        #by gender gap in each casual-type
+
+ggplot(csf1, aes(x = factor(year), y = wage, fill= sex)) +
+    geom_col(position ="dodge") +
+    theme_bw() +facet_wrap(~sector+casual,nrow=2)
+
+
+#casual worker-sex-industry
+cast_dt[(status_code == 51 |status_code == 41 |status_code == 42)& sex != "Transgender" ,.(wage = round(sum(wage*weight)/sum(weight),2)),.(sex,year,industry,casual)]->cs3
+
+
+ggplot(cs3, aes(x = year, y = wage, fill = sex)) +
+    geom_col(position = "dodge") +
+    theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + 
+  labs(x = "year", y = "wage of casual worker", title = "Wages of casual labour") +
+    facet_wrap(~ industry,nrow=2)
+    
+
+
+#Rural-urban *industry
+
+cast_dt[(status_code == 51 |status_code == 41 |status_code == 42)& sex != "Transgender" ,.(wage = round(sum(wage*weight)/sum(weight),2)),.(sex,year,industry,sector)]->csf3
+                                                                                  
+ggplot(csf3, aes(x = year, y = wage, fill = sector)) +
+    geom_col(position = "dodge") +
+    theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) + 
+  labs(x = "year", y = "wage of casual worker", title = "Wages of casual labour") +
+    facet_wrap(~ industry,nrow=2)
